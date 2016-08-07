@@ -32,7 +32,9 @@ var UTILS = {
         return res.json();
     },
     unwrapDestinyResponse: function unwrapDestinyResponse(res) {
-        if (res.Response && res.Response.data) {
+        if (res.Response && res.Response.data && res.Response.definitions) {
+            return res.Response;
+        } else if (res.Response && res.Response.data) {
             return res.Response.data;
         } else if (res.Response) {
             return res.Response;

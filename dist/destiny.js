@@ -83,6 +83,18 @@ var Destiny =
 
 	    var template = _lodash2['default'].template(method.url); // README: so that we can have parametised URLs
 
+	    var serialize = function serialize(obj, prefix) {
+	        var str = [];
+	        for (var p in obj) {
+	            if (obj.hasOwnProperty(p)) {
+	                var k = prefix ? prefix + "[" + p + "]" : p,
+	                    v = obj[p];
+	                str.push(typeof v == "object" ? serialize(v, k) : encodeURIComponent(k) + "=" + encodeURIComponent(v));
+	            }
+	        }
+	        return str.join("&");
+	    };
+
 	    lib[method.name] = function (params, headers) {
 	        return _es6Promise.Promise.resolve(params).then(function (params) {
 
@@ -114,7 +126,23 @@ var Destiny =
 	                delete options.body;
 	            }
 
-	            return fetch('' + HOST + template(params), options);
+	            var apiUrl = '' + HOST + template(params);
+
+	            if (method.optional) {
+	                var query = {};
+	                method.optional.forEach(function (el) {
+	                    if (params.hasOwnProperty(el)) {
+	                        query[el] = params[el];
+	                    }
+	                });
+
+	                console.log('' + serialize(query));
+	                if (_lodash2['default'].size(query) > 0) {
+	                    apiUrl = apiUrl + '?' + serialize(query);
+	                }
+	            }
+
+	            return fetch(apiUrl, options);
 	        }).then(_utils.UTILS.json).then(_utils.UTILS.unwrapDestinyResponse);
 	    };
 
@@ -1130,14 +1158,55 @@ var Destiny =
 /***/ function(module, exports) {
 
 	// shim for using process in browser
-
 	var process = module.exports = {};
+
+	// cached from whatever global is present so that test runners that stub it
+	// don't break things.  But we need to wrap it in a try catch in case it is
+	// wrapped in strict mode code which doesn't define any globals.  It's inside a
+	// function because try/catches deoptimize in certain engines.
+
+	var cachedSetTimeout;
+	var cachedClearTimeout;
+
+	(function () {
+	    try {
+	        cachedSetTimeout = setTimeout;
+	    } catch (e) {
+	        cachedSetTimeout = function () {
+	            throw new Error('setTimeout is not defined');
+	        }
+	    }
+	    try {
+	        cachedClearTimeout = clearTimeout;
+	    } catch (e) {
+	        cachedClearTimeout = function () {
+	            throw new Error('clearTimeout is not defined');
+	        }
+	    }
+	} ())
+	function runTimeout(fun) {
+	    if (cachedSetTimeout === setTimeout) {
+	        return setTimeout(fun, 0);
+	    } else {
+	        return cachedSetTimeout.call(null, fun, 0);
+	    }
+	}
+	function runClearTimeout(marker) {
+	    if (cachedClearTimeout === clearTimeout) {
+	        clearTimeout(marker);
+	    } else {
+	        cachedClearTimeout.call(null, marker);
+	    }
+	}
 	var queue = [];
 	var draining = false;
 	var currentQueue;
 	var queueIndex = -1;
 
 	function cleanUpNextTick() {
+	    if (!draining || !currentQueue) {
+	        return;
+	    }
 	    draining = false;
 	    if (currentQueue.length) {
 	        queue = currentQueue.concat(queue);
@@ -1153,7 +1222,7 @@ var Destiny =
 	    if (draining) {
 	        return;
 	    }
-	    var timeout = setTimeout(cleanUpNextTick);
+	    var timeout = runTimeout(cleanUpNextTick);
 	    draining = true;
 
 	    var len = queue.length;
@@ -1170,7 +1239,7 @@ var Destiny =
 	    }
 	    currentQueue = null;
 	    draining = false;
-	    clearTimeout(timeout);
+	    runClearTimeout(timeout);
 	}
 
 	process.nextTick = function (fun) {
@@ -1182,7 +1251,7 @@ var Destiny =
 	    }
 	    queue.push(new Item(fun, args));
 	    if (queue.length === 1 && !draining) {
-	        setTimeout(drainQueue, 0);
+	        runTimeout(drainQueue);
 	    }
 	};
 
@@ -13729,7 +13798,9 @@ var Destiny =
 	        return res.json();
 	    },
 	    unwrapDestinyResponse: function unwrapDestinyResponse(res) {
-	        if (res.Response && res.Response.data) {
+	        if (res.Response && res.Response.data && res.Response.definitions) {
+	            return res.Response;
+	        } else if (res.Response && res.Response.data) {
 	            return res.Response.data;
 	        } else if (res.Response) {
 	            return res.Response;
@@ -13762,7 +13833,7 @@ var Destiny =
 	/**
 	 * List of GET Endpoints available on the Destiny API
 	 */
-	var GET = [{ name: 'Search', url: 'SearchDestinyPlayer/${ membershipType }/${ name }/', required: ['membershipType', 'name'] }, { name: 'Account', url: '${ membershipType }/Account/${ membershipId }/', required: ['membershipType', 'membershipId'] }, { name: 'Character', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Activities', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Activities/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Inventory', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Inventory/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Progression', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Progression/', required: ['membershipType', 'membershipId', 'characterId'] }].map(_utils.UTILS.assignMap({ options: { method: _utils.UTILS.METHODS.GET, headers: _utils.UTILS.HEADERS } }));
+	var GET = [{ name: 'Search', url: 'SearchDestinyPlayer/${ membershipType }/${ name }/', required: ['membershipType', 'name'], optional: ['ignorecase'] }, { name: 'Account', url: '${ membershipType }/Account/${ membershipId }/', required: ['membershipType', 'membershipId'] }, { name: 'Character', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Activities', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Activities/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Inventory', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Inventory/Summary/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'Progression', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Progression/', required: ['membershipType', 'membershipId', 'characterId'] }, { name: 'ItemDetail', url: '${ membershipType }/Account/${ membershipId }/Character/${ characterId }/Inventory/${ itemInstanceId }/', required: ['membershipType', 'membershipId', 'characterId', 'itemInstanceId'], optional: ['definitions'] }].map(_utils.UTILS.assignMap({ options: { method: _utils.UTILS.METHODS.GET, headers: _utils.UTILS.HEADERS } }));
 
 	/**
 	 * List of POST Endpoints available on the Destiny API
@@ -13790,16 +13861,31 @@ var Destiny =
 /* 11 */
 /***/ function(module, exports) {
 
-	(function() {
+	(function(self) {
 	  'use strict';
 
 	  if (self.fetch) {
 	    return
 	  }
 
+	  var support = {
+	    searchParams: 'URLSearchParams' in self,
+	    iterable: 'Symbol' in self && 'iterator' in Symbol,
+	    blob: 'FileReader' in self && 'Blob' in self && (function() {
+	      try {
+	        new Blob()
+	        return true
+	      } catch(e) {
+	        return false
+	      }
+	    })(),
+	    formData: 'FormData' in self,
+	    arrayBuffer: 'ArrayBuffer' in self
+	  }
+
 	  function normalizeName(name) {
 	    if (typeof name !== 'string') {
-	      name = name.toString();
+	      name = String(name)
 	    }
 	    if (/[^a-z0-9\-#$%&'*+.\^_`|~]/i.test(name)) {
 	      throw new TypeError('Invalid character in header field name')
@@ -13809,26 +13895,41 @@ var Destiny =
 
 	  function normalizeValue(value) {
 	    if (typeof value !== 'string') {
-	      value = value.toString();
+	      value = String(value)
 	    }
 	    return value
+	  }
+
+	  // Build a destructive iterator for the value list
+	  function iteratorFor(items) {
+	    var iterator = {
+	      next: function() {
+	        var value = items.shift()
+	        return {done: value === undefined, value: value}
+	      }
+	    }
+
+	    if (support.iterable) {
+	      iterator[Symbol.iterator] = function() {
+	        return iterator
+	      }
+	    }
+
+	    return iterator
 	  }
 
 	  function Headers(headers) {
 	    this.map = {}
 
-	    var self = this
 	    if (headers instanceof Headers) {
-	      headers.forEach(function(name, values) {
-	        values.forEach(function(value) {
-	          self.append(name, value)
-	        })
-	      })
+	      headers.forEach(function(value, name) {
+	        this.append(name, value)
+	      }, this)
 
 	    } else if (headers) {
 	      Object.getOwnPropertyNames(headers).forEach(function(name) {
-	        self.append(name, headers[name])
-	      })
+	        this.append(name, headers[name])
+	      }, this)
 	    }
 	  }
 
@@ -13864,12 +13965,34 @@ var Destiny =
 	    this.map[normalizeName(name)] = [normalizeValue(value)]
 	  }
 
-	  // Instead of iterable for now.
-	  Headers.prototype.forEach = function(callback) {
-	    var self = this
+	  Headers.prototype.forEach = function(callback, thisArg) {
 	    Object.getOwnPropertyNames(this.map).forEach(function(name) {
-	      callback(name, self.map[name])
-	    })
+	      this.map[name].forEach(function(value) {
+	        callback.call(thisArg, value, name, this)
+	      }, this)
+	    }, this)
+	  }
+
+	  Headers.prototype.keys = function() {
+	    var items = []
+	    this.forEach(function(value, name) { items.push(name) })
+	    return iteratorFor(items)
+	  }
+
+	  Headers.prototype.values = function() {
+	    var items = []
+	    this.forEach(function(value) { items.push(value) })
+	    return iteratorFor(items)
+	  }
+
+	  Headers.prototype.entries = function() {
+	    var items = []
+	    this.forEach(function(value, name) { items.push([name, value]) })
+	    return iteratorFor(items)
+	  }
+
+	  if (support.iterable) {
+	    Headers.prototype[Symbol.iterator] = Headers.prototype.entries
 	  }
 
 	  function consumed(body) {
@@ -13902,21 +14025,8 @@ var Destiny =
 	    return fileReaderReady(reader)
 	  }
 
-	  var support = {
-	    blob: 'FileReader' in self && 'Blob' in self && (function() {
-	      try {
-	        new Blob();
-	        return true
-	      } catch(e) {
-	        return false
-	      }
-	    })(),
-	    formData: 'FormData' in self
-	  }
-
 	  function Body() {
 	    this.bodyUsed = false
-
 
 	    this._initBody = function(body) {
 	      this._bodyInit = body
@@ -13926,10 +14036,25 @@ var Destiny =
 	        this._bodyBlob = body
 	      } else if (support.formData && FormData.prototype.isPrototypeOf(body)) {
 	        this._bodyFormData = body
+	      } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+	        this._bodyText = body.toString()
 	      } else if (!body) {
 	        this._bodyText = ''
+	      } else if (support.arrayBuffer && ArrayBuffer.prototype.isPrototypeOf(body)) {
+	        // Only support ArrayBuffers for POST method.
+	        // Receiving ArrayBuffers happens via Blobs, instead.
 	      } else {
 	        throw new Error('unsupported BodyInit type')
+	      }
+
+	      if (!this.headers.get('content-type')) {
+	        if (typeof body === 'string') {
+	          this.headers.set('content-type', 'text/plain;charset=UTF-8')
+	        } else if (this._bodyBlob && this._bodyBlob.type) {
+	          this.headers.set('content-type', this._bodyBlob.type)
+	        } else if (support.searchParams && URLSearchParams.prototype.isPrototypeOf(body)) {
+	          this.headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8')
+	        }
 	      }
 	    }
 
@@ -13995,20 +14120,44 @@ var Destiny =
 	    return (methods.indexOf(upcased) > -1) ? upcased : method
 	  }
 
-	  function Request(url, options) {
+	  function Request(input, options) {
 	    options = options || {}
-	    this.url = url
+	    var body = options.body
+	    if (Request.prototype.isPrototypeOf(input)) {
+	      if (input.bodyUsed) {
+	        throw new TypeError('Already read')
+	      }
+	      this.url = input.url
+	      this.credentials = input.credentials
+	      if (!options.headers) {
+	        this.headers = new Headers(input.headers)
+	      }
+	      this.method = input.method
+	      this.mode = input.mode
+	      if (!body) {
+	        body = input._bodyInit
+	        input.bodyUsed = true
+	      }
+	    } else {
+	      this.url = input
+	    }
 
-	    this.credentials = options.credentials || 'omit'
-	    this.headers = new Headers(options.headers)
-	    this.method = normalizeMethod(options.method || 'GET')
-	    this.mode = options.mode || null
+	    this.credentials = options.credentials || this.credentials || 'omit'
+	    if (options.headers || !this.headers) {
+	      this.headers = new Headers(options.headers)
+	    }
+	    this.method = normalizeMethod(options.method || this.method || 'GET')
+	    this.mode = options.mode || this.mode || null
 	    this.referrer = null
 
-	    if ((this.method === 'GET' || this.method === 'HEAD') && options.body) {
+	    if ((this.method === 'GET' || this.method === 'HEAD') && body) {
 	      throw new TypeError('Body not allowed for GET or HEAD requests')
 	    }
-	    this._initBody(options.body)
+	    this._initBody(body)
+	  }
+
+	  Request.prototype.clone = function() {
+	    return new Request(this)
 	  }
 
 	  function decode(body) {
@@ -14026,7 +14175,7 @@ var Destiny =
 
 	  function headers(xhr) {
 	    var head = new Headers()
-	    var pairs = xhr.getAllResponseHeaders().trim().split('\n')
+	    var pairs = (xhr.getAllResponseHeaders() || '').trim().split('\n')
 	    pairs.forEach(function(header) {
 	      var split = header.trim().split(':')
 	      var key = split.shift().trim()
@@ -14043,32 +14192,55 @@ var Destiny =
 	      options = {}
 	    }
 
-	    this._initBody(bodyInit)
 	    this.type = 'default'
-	    this.url = null
 	    this.status = options.status
 	    this.ok = this.status >= 200 && this.status < 300
 	    this.statusText = options.statusText
 	    this.headers = options.headers instanceof Headers ? options.headers : new Headers(options.headers)
 	    this.url = options.url || ''
+	    this._initBody(bodyInit)
 	  }
 
 	  Body.call(Response.prototype)
 
-	  self.Headers = Headers;
-	  self.Request = Request;
-	  self.Response = Response;
+	  Response.prototype.clone = function() {
+	    return new Response(this._bodyInit, {
+	      status: this.status,
+	      statusText: this.statusText,
+	      headers: new Headers(this.headers),
+	      url: this.url
+	    })
+	  }
 
-	  self.fetch = function(input, init) {
-	    // TODO: Request constructor should accept input, init
-	    var request
-	    if (Request.prototype.isPrototypeOf(input) && !init) {
-	      request = input
-	    } else {
-	      request = new Request(input, init)
+	  Response.error = function() {
+	    var response = new Response(null, {status: 0, statusText: ''})
+	    response.type = 'error'
+	    return response
+	  }
+
+	  var redirectStatuses = [301, 302, 303, 307, 308]
+
+	  Response.redirect = function(url, status) {
+	    if (redirectStatuses.indexOf(status) === -1) {
+	      throw new RangeError('Invalid status code')
 	    }
 
+	    return new Response(null, {status: status, headers: {location: url}})
+	  }
+
+	  self.Headers = Headers
+	  self.Request = Request
+	  self.Response = Response
+
+	  self.fetch = function(input, init) {
 	    return new Promise(function(resolve, reject) {
+	      var request
+	      if (Request.prototype.isPrototypeOf(input) && !init) {
+	        request = input
+	      } else {
+	        request = new Request(input, init)
+	      }
+
 	      var xhr = new XMLHttpRequest()
 
 	      function responseURL() {
@@ -14081,26 +14253,25 @@ var Destiny =
 	          return xhr.getResponseHeader('X-Request-URL')
 	        }
 
-	        return;
+	        return
 	      }
 
 	      xhr.onload = function() {
-	        var status = (xhr.status === 1223) ? 204 : xhr.status
-	        if (status < 100 || status > 599) {
-	          reject(new TypeError('Network request failed'))
-	          return
-	        }
 	        var options = {
-	          status: status,
+	          status: xhr.status,
 	          statusText: xhr.statusText,
 	          headers: headers(xhr),
 	          url: responseURL()
 	        }
-	        var body = 'response' in xhr ? xhr.response : xhr.responseText;
+	        var body = 'response' in xhr ? xhr.response : xhr.responseText
 	        resolve(new Response(body, options))
 	      }
 
 	      xhr.onerror = function() {
+	        reject(new TypeError('Network request failed'))
+	      }
+
+	      xhr.ontimeout = function() {
 	        reject(new TypeError('Network request failed'))
 	      }
 
@@ -14114,17 +14285,15 @@ var Destiny =
 	        xhr.responseType = 'blob'
 	      }
 
-	      request.headers.forEach(function(name, values) {
-	        values.forEach(function(value) {
-	          xhr.setRequestHeader(name, value)
-	        })
+	      request.headers.forEach(function(value, name) {
+	        xhr.setRequestHeader(name, value)
 	      })
 
 	      xhr.send(typeof request._bodyInit === 'undefined' ? null : request._bodyInit)
 	    })
 	  }
 	  self.fetch.polyfill = true
-	})();
+	})(typeof self !== 'undefined' ? self : this);
 
 
 /***/ }

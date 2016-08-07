@@ -18,7 +18,9 @@ export const UTILS = {
     assignMap: obj => _.partialRight(_.assign, obj),
     json: res => res.json(),
     unwrapDestinyResponse: res => {
-        if (res.Response && res.Response.data) {
+        if (res.Response && res.Response.data && res.Response.definitions) {
+            return res.Response;
+        } else if (res.Response && res.Response.data) {
             return res.Response.data;
         } else if (res.Response) {
             return res.Response;

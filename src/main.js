@@ -23,6 +23,20 @@ let createRequest = (lib, method) => {
 
     let template = _.template(method.url); // README: so that we can have parametised URLs
 
+    let serialize = (obj, prefix) => {
+      var str = [];
+      for (var p in obj) {
+        if (obj.hasOwnProperty(p)) {
+          var k = prefix ? prefix + "[" + p + "]" : p, v = obj[p];
+          str.push(
+            typeof v == "object" ? serialize(v, k) :
+              encodeURIComponent(k) + "=" + encodeURIComponent(v)
+          );
+        }
+      }
+      return str.join("&");
+    }
+
     lib[method.name] = function (params, headers) {
         return Promise.resolve(params)
             .then(params => {
@@ -62,10 +76,23 @@ let createRequest = (lib, method) => {
                     delete options.body;
                 }
 
-                return fetch(
-                    `${HOST}${template(params)}`,
-                    options
-                );
+                var apiUrl = `${HOST}${template(params)}`
+
+                if (method.optional) {
+                  var query = {};
+                  method.optional.forEach( function(el) {
+                    if (params.hasOwnProperty(el)) {
+                      query[el] = params[el];
+                    }
+                  });
+
+                  console.log(`${serialize(query)}`);
+                  if ( _.size(query) > 0) {
+                    apiUrl = `${apiUrl}?${serialize(query)}`
+                  }
+                }
+
+                return fetch(apiUrl, options);
             })
             .then(UTILS.json)
             .then(UTILS.unwrapDestinyResponse);
